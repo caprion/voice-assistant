@@ -108,15 +108,17 @@ class Kavi:
             wf.setnchannels(1); wf.setsampwidth(2); wf.setframerate(SAMPLE_RATE)
             wf.writeframes(audio.astype(np.int16).tobytes())
         try:
+            # nice +10: lower priority so model inference doesn't peg the CPU
+            prefix = ["nice", "-n", "10"]
             if self.stt == "whisper":
                 out = subprocess.run(
-                    [TOOLS["whisper_bin"], "-m", TOOLS["whisper_model"], "-f", str(wav),
-                     "--no-timestamps", "--print-special", "0"],
+                    prefix + [TOOLS["whisper_bin"], "-m", TOOLS["whisper_model"], "-f", str(wav),
+                              "--no-timestamps", "--print-special", "0"],
                     capture_output=True, text=True, timeout=30).stdout
                 lines = [l.strip() for l in out.splitlines() if l.strip()]
                 return lines[-1] if lines else ""
             out = subprocess.run(
-                [TOOLS["parakeet_bin"], "-m", TOOLS["parakeet_model"], "-f", str(wav), "--no-prints"],
+                prefix + [TOOLS["parakeet_bin"], "-m", TOOLS["parakeet_model"], "-f", str(wav), "--no-prints"],
                 capture_output=True, text=True, timeout=30).stdout
             skip = ("[", "ggml_cuda_init", "system_info", "read_audio", "main:", "parakeet_", "Successfully")
             for line in out.splitlines():
@@ -170,7 +172,7 @@ class Kavi:
     def ask_qwen(self, prompt: str) -> str:
         try:
             out = subprocess.run(
-                [TOOLS["llama_bin"], "-m", TOOLS["llama_model"], "-p", prompt,
+                ["nice", "-n", "10", TOOLS["llama_bin"], "-m", TOOLS["llama_model"], "-p", prompt,
                  "-n", "256", "-c", "2048", "--temp", "0.7", "-ngl", "999"],
                 capture_output=True, text=True, timeout=60).stdout
             return "\n".join(l for l in out.splitlines()
@@ -223,9 +225,9 @@ class Kavi:
         self.type_at_cursor(transcript)
 
     def watch_trigger(self) -> None:
-        """Print Screen hotkey mode (--trigger flag)."""
+        """Print Screen hotkey mode (default). Cooldown between cycles lets the system breathe."""
         print(f"[kavi] mode=trigger  stt={self.stt}  tts={self.tts}")
-        print(f"[kavi] waiting for Print Screen hotkey. Ctrl+C to exit.")
+        print(f"[kavi] waiting for Print Screen (or Right Ctrl) hotkey. Ctrl+C to exit.")
         TRIGGER.unlink(missing_ok=True)
         try:
             while True:
@@ -235,16 +237,15 @@ class Kavi:
                     if self.run_cycle() == "exit":
                         break
                     print("[kavi] ready")
+                    time.sleep(0.2)  # cooldown: let CPU/GPU settle
                 time.sleep(0.1)
         except KeyboardInterrupt:
             print("\n[kavi] Ctrl+C, exiting")
 
     def run_continuously(self) -> None:
-        """Always-on mode (default). VAD segments speech, smart dispatch per utterance.
-        Partial transcripts appear in the log every PARTIAL_INTERVAL_SEC during speech."""
+        """Always-on mode (--always-on flag). Heavier on CPU. Use only on capable hardware."""
         print(f"[kavi] mode=always-on  stt={self.stt}  tts={self.tts}")
         print(f"[kavi] listening. Say '{WAKE_WORD}' for chat, anything else for dictation. Ctrl+C to exit.")
-        print(f"[kavi] partials every {PARTIAL_INTERVAL}s, end-of-utterance after {END_SILENCE_SEC}s silence")
         try:
             cycle = 0
             while True:
@@ -252,17 +253,20 @@ class Kavi:
                 print(f"\n[kavi] cycle {cycle}")
                 if self.run_cycle() == "exit":
                     break
+                time.sleep(0.2)
         except KeyboardInterrupt:
             print("\n[kavi] Ctrl+C, exiting")
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stt", choices=["whisper", "parakeet"], default="parakeet")
-    parser.add_argument("--no-tts", action="store_true")
+    parser.add_argument("--stt", choices=["whisper", "parakeet"], default="whisper",
+                        help="STT engine. Default: whisper (lighter CPU). Parakeet is more accurate but heavier.")
+    parser.add_argument("--no-tts", action="store_true",
+                        help="disable TTS reply in chat mode (default: TTS enabled)")
     parser.add_argument("--always-on", action="store_true",
                         help="always-listening mode (default: Print Screen hotkey)")
-    parser.add_argument("--once", action="store_true", help="one cycle then exit")
+    parser.add_argument("--once", action="store_true", help="run one cycle then exit")
     args = parser.parse_args()
 
     kavi = Kavi(stt=args.stt, tts=not args.no_tts)
