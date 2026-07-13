@@ -207,6 +207,12 @@ class Kavi:
         transcript = self.transcribe(audio)
         if not transcript:
             print("[kavi] (empty)"); return None
+        # Filter garbage tokens (Whisper special tokens, model artifacts)
+        garbage = ("<|endoftext|>", "<|notimestamps|>", "[BLANK_AUDIO]", "[inaudible]",
+                   "(blank audio)", "(music)", "(silence)")
+        if transcript.strip().lower() in garbage or all(g in transcript.lower() for g in garbage if "<|" in g):
+            print(f"[kavi] (garbage: {transcript[:40]}...)")
+            return None
         print(f"[kavi] heard: {transcript}")
 
         # Smart dispatch: wake word -> chat; otherwise -> dictation at cursor
