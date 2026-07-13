@@ -1,114 +1,113 @@
-# Overnight Plan — 2026-07-13
+# Overnight Plan v2 — Streaming Kavi
 
-> What I'm doing in auto mode while Sumit sleeps. He'll review when he wakes up.
+> Revised after user feedback. Focus: perfect Wispr Flow streaming on this laptop.
+> Path C is final (no training). Essay stays as-is. No video work tonight.
 
-## The "whole vision" the user asked me to complete
+## The goal
 
-Original goals (start of project):
-1. **Fine-tune a small model on Sumit's writing** — apply writing-hygiene rules
-2. **Build a local voice assistant** (Kavi)
-3. **Run on a 2015 Dell Inspiron 7559**
+Make Kavi work in true streaming mode without overwhelming the laptop:
+- STT partials appear as user speaks (using whisper-server persistent process)
+- LLM response streams token-by-token (using llama-server streaming HTTP endpoint)
+- Resource use stays sane: don't peg CPU or GPU, no fan noise storm
 
-Status at end of session:
-- (1) Path C: abandoned training, ship base model only
-- (2) Kavi v0: working, hotkey mode, smart dispatch
-- (3) Hardware proven, walls documented
+## Architecture for v1
 
-The user said: "fix the whole vision that we set otu also... plan and set everything up for that too over night."
+```
+[Print Screen] → xbindkeys → ~/.cache/kavi/trigger (flag)
+                                          ↓
+[Kavi daemon] ← (polls flag every 100ms)
+    ↓
+[Audio capture with VAD] → 0.8s silence = end of utterance
+    ↓
+[POST /inference (audio.wav) → whisper-server] → partial transcript
+    ↓ (poll every 0.4s for partials)
+[Smart dispatch]
+    ├─ wake word "Kavi" detected → [POST /v1/chat/completions?stream=true → llama-server]
+    │                                  ↓ (SSE stream)
+    │                              [print tokens as they arrive + TTS chunked]
+    └─ no wake word → [xdotool type at cursor]
+```
 
-Interpretation: don't just polish the essay. The voice-enforcer vision was real. Try once more, set up the missing pieces, document the journey.
+## Server config
 
-## Tonight's work (5 tasks)
+| Server | Model | Backend | VRAM | RAM |
+|---|---|---|---|---|
+| whisper-server | Parakeet TDT 0.6B | GPU | ~1.5 GB | 0.3 GB |
+| llama-server | Qwen 2.5 1.5B | CPU only | 0 | ~3 GB |
 
-### Task 1: Refine essay using spine A approach
-The current essay draft is at `voice-enforcer/explainer/essay-draft.md`. It's 1543 words, has 11 sections, tells a journey. Per the spine approach (from `brain/pages/decisions/spine-a-narrative-choice.md`), it should have:
-- One clear thesis (falsifiable)
-- First-person voice
-- Code-first / B2C dev audience
-- ~1800-2200 words
-- No em dashes, no banned phrases
+Total: 1.5 GB VRAM, 3.3 GB RAM. Plenty of headroom.
 
-Action:
-- Pick ONE thesis. Candidates:
-  - "The wall is the content" — when hardware can't do something, write the wall into the story
-  - "Old hardware, new leverage" — what 2015 can do with the right toolchain
-  - "Inference fits where training doesn't, on a 2015 laptop"
-- Restructure to spine A pattern (opening → fork → lever → companion → close)
-- Apply voice rules rigorously
-- ~2000 words
+Why split GPU/CPU:
+- Combined VRAM would be 4.5 GB (over the 4 GB ceiling)
+- Qwen on CPU at 1.5B is slow (~2-4 tok/sec) but fine for short responses
+- Parakeet on GPU is fast for streaming partials
+- The split keeps total memory in budget
 
-### Task 2: Try Qwen 0.5B training
-We hit OOM on Qwen 1.5B at 4 GB VRAM. Qwen 0.5B fp16 = 1.5 GB. With activations, should fit.
+## Work plan (overnight)
 
-This would actually deliver the voice-enforcer vision (a real fine-tuned model), not just Path C.
+### 1. Start whisper-server in background
+- whisper.cpp build already has whisper-server binary
+- Run with Parakeet model, listen on localhost:8080
+- Verify with curl
+- Log to /tmp/whisper-server.log
 
-Action:
-- Pull Qwen 0.5B Instruct GGUF for inference baseline
-- Pull Qwen 0.5B Instruct safetensors for training
-- Run `train_hf.py` or `train_manual.py` with Qwen 0.5B
-- Eval on the same eval.jsonl
-- If works: real LoRA adapter, integrate into Kavi
-- If fails: extend Path C narrative
+### 2. Start llama-server in background
+- llama.cpp build already has llama-server binary
+- Run with Qwen 1.5B Q4_K_M, CPU only (-ngl 0)
+- Listen on localhost:8081
+- Verify with curl
+- Log to /tmp/llama-server.log
 
-This is the highest-risk task. Run as background, log everything.
+### 3. Refactor Kavi to use HTTP APIs
+- Replace subprocess.run calls with httpx calls
+- whisper-server: POST audio file → get JSON transcript
+- llama-server: POST with stream=true → get SSE token stream
+- Keep flag file + xbindkeys mechanism
 
-### Task 3: Set up video recording environment
-The demo script is at `voice-enforcer/explainer/demo-script.md`. Recording environment needs to be ready when user wakes up.
+### 4. Implement streaming LLM response
+- httpx with stream=True
+- Parse SSE chunks, print tokens to log as they arrive
+- TTS chunk by sentence (Piper supports per-sentence synthesis)
+- This is the "ChatGPT Live" feel
 
-Action:
-- Install SimpleScreenRecorder (lightweight PipeWire-native screen capture)
-- Install Flowblade (Linux-native video editor, optimized for older hardware)
-- Verify both work (smoke test)
-- Test microphone capture for narration
-- Create a recording runbook the user can follow
+### 5. Implement streaming STT partials
+- With persistent whisper-server, partials are fast (no model reload)
+- Every 0.4s during speech, send current audio buffer to whisper-server
+- Display partials in log
+- Drop incomplete if a newer partial arrives
 
-### Task 4: Refine demo script
-The current script was for the "training" narrative. If the essay is reframed (or if 0.5B training works), the script should match.
+### 6. Resource monitoring
+- Log GPU/CPU usage periodically
+- If GPU pegged, throttle partial interval
+- If CPU pegged, drop STT partials, only final
 
-Action:
-- After essay is final, sync the demo script to it
-- Include both Path C AND 0.5B-attempt angles
-- Keep TTS suggestions but note Piper American voice might not match Sumit's preference
+### 7. Test
+- Hotkey → record → STT partials appear → final transcript
+- "Kavi, what is X" → LLM streams tokens → spoken
+- Verify CPU/GPU not pegged
+- Document resource use
 
-### Task 5: Update docs and commit
-- Update STATE.md with overnight progress
-- Update ITERATIONS.md with the 0.5B attempt
-- Commit everything to local git (push tomorrow with proper auth)
+### 8. Update docs
+- Note server config in STATE.md
+- Update ITERATIONS.md with the streaming architecture
+- Commit all overnight changes
 
-## Order of operations
+## What I will NOT do
 
-1. **Plan doc** (this file) ← now
-2. **Refine essay** with spine A
-3. **Start Qwen 0.5B training** in background (will take 1-2 hours)
-4. **Install video tools** (SimpleScreenRecorder, Flowblade)
-5. **Refine demo script** to match essay
-6. **Wait for training**, capture results
-7. **Update STATE.md, ITERATIONS.md**
-8. **Commit**
-
-## Boundaries
-
-What I will NOT do without explicit confirmation:
+- Train any model (Path C is final)
+- Rewrite the essay
+- Install video tools
 - Push to remote (no auth)
-- Delete any existing files
-- Modify the 5 skills in brain/
-- Make API calls beyond what's already approved
-
-What I will do (auto mode permission):
-- Edit essays, scripts, docs in the voice-assistant repo
-- Install needed tools (Flowblade, SimpleScreenRecorder)
-- Run training in background
-- Update STATE.md, ITERATIONS.md
-- Commit to local git
 
 ## Success criteria
 
 By morning:
-- Essay is sharper (spine A applied, ONE thesis, ~2000 words, voice rules pass)
-- Video tools are installed and verified
-- Qwen 0.5B training has been attempted (success or honest failure documented)
-- Demo script matches the essay
-- STATE.md and ITERATIONS.md are current
-- Local git has all overnight changes committed
+- whisper-server running on localhost:8080 with Parakeet
+- llama-server running on localhost:8081 with Qwen (CPU)
+- Kavi uses both via HTTP (no more subprocess model loads)
+- LLM responses stream token by token
+- STT partials appear during speech (faster cycle, persistent model)
+- Resource use stays under 60% CPU and 50% GPU during normal operation
+- STATE.md and ITERATIONS.md updated
 
-User wakes up, reviews the changes, can push to caprion/voice-assistant with `gh auth login && git push`.
+User wakes up, presses Print Screen, sees streaming partials, gets ChatGPT Live feel from Kavi.
