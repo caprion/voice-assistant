@@ -1,0 +1,35 @@
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Generated training data (large, regenerable)
+voice-enforcer/data/pairs.jsonl
+voice-enforcer/data/train.jsonl
+voice-enforcer/data/eval.jsonl
+
+# Models (large, download separately)
+*.gguf
+*.bin
+*.ggml-model.*
+
+# Cache
+cache/
+.cache/
+
+# TTS audio output
+*.wav
+
+# Build artifacts
+build/
+dist/
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
