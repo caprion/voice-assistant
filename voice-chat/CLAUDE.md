@@ -42,10 +42,12 @@ Typing into the terminal takes focus. Talking doesn't. For short queries and qui
 ## Files
 
 - `scripts/kavi.py` — main voice assistant (config from skill)
+- `scripts/kavi-cli.sh` — `kavi` control CLI (start/stop/status/logs/correct/uncorrect/corrections)
 - `scripts/kavi-trigger.sh` — xbindkeys hotkey trigger
 - `scripts/start-whisper-server.sh` — persistent whisper-server (STT), start before Kavi
 - `scripts/chat.sh` — legacy v0 (fixed 5s cuts, superseded)
 - `scripts/venus.sh` — legacy wake-word prototype
+- `config/corrections.json` — deterministic transcript correction dictionary (see below)
 - `cache/` — temporary WAV files (gitignored)
 - `~/.xbindkeysrc` — hotkey bindings
 
@@ -60,6 +62,38 @@ Print Screen or Right Ctrl → `kavi-trigger.sh` → flag file → Kavi cycle.
 - `--once`: run one cycle and exit (for testing).
 - `--tts`: enable Piper TTS reply in chat mode (default: text only, opt-in).
 - `--stt parakeet`: use Parakeet instead of whisper base.en (more accurate, no persistent server, ~1.4s reload per cycle).
+
+## Accuracy: corrections dictionary
+
+Deterministic, zero-latency, zero-LLM word/phrase substitution applied to every
+transcript right before dispatch (typing or chat). Reloaded from disk every
+cycle, so no restart needed. `config/corrections.json`, `{"wrong phrase": "right phrase"}`.
+
+```bash
+kavi correct "sink up" "sync up"   # add/update an entry
+kavi uncorrect "sink up"           # delete an entry
+kavi corrections                   # list everything saved
+```
+
+An LLM-based cleanup pass (Qwen 2.5 1.5B rewriting the whole transcript) was
+prototyped and rejected: ~1/3 hit rate on real mis-hearings, occasionally
+silently dropped words with no way to detect it happened, and added 1.3-2.5s
+latency per cycle. Not worth the risk vs. this deterministic approach.
+
+## Mid-utterance verbal edit: "scratch that" / "delete that"
+
+Say either phrase anywhere in a single dictation/chat utterance and everything
+up to and including the last occurrence is discarded before dispatch - only
+what follows gets typed/sent. Nothing after the last marker discards the
+whole utterance (redo by pressing the hotkey again).
+
+Because each cycle is one continuous recording -> one transcript -> one typed
+block (see "Don't" below - no streaming partials), this discards back to the
+*start of the current recording*, not just the last sentence. Practical
+workaround (validated live): keep dictation bursts short - stop/restart the
+hotkey every few seconds - so a "scratch that" only costs a small chunk.
+Accepted as good V1 behavior; a future version could shrink the blast radius
+(e.g. sentence-boundary-aware discard) but isn't planned yet.
 
 ## Startup (both servers, then Kavi)
 
@@ -119,3 +153,7 @@ Intelligence lives in `brain/skills/kavi-voice-assistant.md` (YAML frontmatter f
 - Parakeet has no persistent server; `--stt parakeet` still pays the ~1.4s reload cost per cycle. Whisper base.en (default) does not have this problem anymore.
 - TTS uses Piper American English voice, doesn't match Indian English preference. Opt-in only via `--tts`.
 - whisper-server and llama-server must be started manually before Kavi (no autostart yet — deliberately deferred until this design settles, see STATE.md open work).
+
+## Roadmap
+
+- **Voice isolation / noise-robust STT** (later, not started): improve accuracy in noisy/multi-speaker environments. Deferred until current single-user quiet-room accuracy work (corrections dictionary, edit commands) has been used enough to know if it's actually still needed.

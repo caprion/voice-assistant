@@ -61,6 +61,54 @@ LLAMA_SERVER_URL = os.environ.get(
     f"http://{os.environ.get('LLAMA_SERVER_HOST', '127.0.0.1')}:{os.environ.get('LLAMA_SERVER_PORT', '8081')}/v1/chat/completions")
 SILERO_VAD_PATH = os.environ.get("SILERO_VAD_PATH", str(Path.home() / ".cache/silero-vad/silero_vad.onnx"))
 SILERO_VAD_THRESHOLD = float(os.environ.get("SILERO_VAD_THRESHOLD", "0.5"))
+EDIT_PHRASES = ("scratch that", "delete that")
+CORRECTIONS_PATH = Path(os.environ.get(
+    "KAVI_CORRECTIONS_PATH",
+    str(Path(__file__).resolve().parent.parent / "config" / "corrections.json")))
+
+
+def load_corrections() -> dict[str, str]:
+    """Reload from disk on every call (cheap, tiny file) so `kavi correct` entries
+    take effect immediately without restarting the daemon."""
+    try:
+        import json
+        with open(CORRECTIONS_PATH) as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def apply_corrections(text: str) -> str:
+    """Deterministic case-insensitive whole-phrase substitution. No LLM, no
+    latency, no risk of dropping or inventing content - worst case an entry is
+    wrong and the original mis-hearing stays, exactly as before this existed.
+    Longest phrases first so multi-word entries win over single-word substrings."""
+    corrections = load_corrections()
+    if not corrections:
+        return text
+    for wrong in sorted(corrections, key=len, reverse=True):
+        right = corrections[wrong]
+        pattern = re.compile(re.escape(wrong), re.IGNORECASE)
+        text = pattern.sub(right, text)
+    return text
+
+
+_EDIT_PATTERN = re.compile(r"\b(" + "|".join(re.escape(p) for p in EDIT_PHRASES) + r")\b", re.IGNORECASE)
+
+
+def apply_edit_commands(text: str) -> str:
+    """Mid-utterance verbal edit: say 'scratch that' or 'delete that' anywhere
+    in a single dictation/chat cycle and everything up to and including the
+    last occurrence is discarded, keeping only what follows. Nothing after
+    the last marker means the whole utterance is discarded (redo the cycle
+    by pressing the hotkey again). Only affects the current cycle's own
+    transcript - it does not reach back and erase text already typed from a
+    previous cycle."""
+    matches = list(_EDIT_PATTERN.finditer(text))
+    if not matches:
+        return text
+    return text[matches[-1].end():].strip()
 
 
 class SileroVAD:
@@ -380,7 +428,20 @@ class Kavi:
             if len(stripped) < 3:
                 print(f"[kavi] (garbage: too short) {stripped}")
                 return None
-            print(f"[kavi] heard: {transcript}")
+            edited = apply_edit_commands(transcript)
+            if edited != transcript:
+                if not edited:
+                    print(f"[kavi] heard: {transcript}")
+                    print("[kavi] edit: 'scratch that'/'delete that' -> discarding whole utterance")
+                    return None
+                print(f"[kavi] heard: {transcript}  -> after edit: {edited}")
+                transcript = edited
+            corrected = apply_corrections(transcript)
+            if corrected != transcript:
+                print(f"[kavi] heard: {transcript}  -> corrected: {corrected}")
+                transcript = corrected
+            else:
+                print(f"[kavi] heard: {transcript}")
 
             # Smart dispatch: force_chat (dedicated hotkey) always goes to chat.
             # Otherwise: wake word -> chat; anything else -> dictation at cursor.
