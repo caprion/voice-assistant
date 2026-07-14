@@ -33,7 +33,7 @@ Kavi is built to run on modest, everyday hardware, not a workstation.
 
 - **Minimum**: any x86_64 Linux machine, 8 GB RAM, CPU-only. Everything falls back to CPU and still works, just slower.
 - **Recommended**: a discrete GPU with 4+ GB VRAM (Maxwell-generation or newer) speeds up STT and LLM inference noticeably.
-- **Developed and tested on**: a 2015 Dell Inspiron 7559 (i7-6700HQ, GTX 960M 4 GB VRAM, 16 GB RAM, Linux Mint 22.3, PipeWire). If it's smooth there, it'll be smooth on most machines built in the last decade.
+- **Developed and tested on**: a 2015-era quad-core laptop with an entry-level 4 GB VRAM GPU, 16 GB RAM. If it's smooth there, it'll be smooth on most machines built in the last decade.
 - Requires X11 (`xdotool`, `xbindkeys`). No Wayland support yet.
 
 ## Architecture
@@ -63,7 +63,7 @@ Full system diagrams (process topology, sequence flows, resource profile): [`ARC
 
 ## Configuration
 
-Kavi loads its tunable config from `brain/skills/kavi-voice-assistant.md` (YAML frontmatter): wake word, fuzzy match distance, VAD aggressiveness, silence thresholds. Edit the skill and restart Kavi, no code changes needed.
+Kavi loads its tunable config from [`voice-chat/config/kavi-config.md`](voice-chat/config/kavi-config.md) (YAML frontmatter): wake word, fuzzy match distance, VAD aggressiveness, silence thresholds. Edit that file and restart Kavi, no code changes needed.
 
 ## Project layout
 

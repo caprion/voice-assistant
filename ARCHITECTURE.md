@@ -98,12 +98,12 @@ flowchart TD
     B --> C{Empty?}
     C -->|Yes| D[Return, no action]
     C -->|No| E{Parenthesized noise?}
-    E -->|Yes (music, silence| F[Return, log as garbage]
+    E -->|Yes: music/silence| F[Return, log as garbage]
     E -->|No| G[Tokenize, search wake word]
-    G --> H{Fuzzy match<br/>distance ≤ 2<br/>in first 5 tokens<br/>(or all)?}
+    G --> H{Fuzzy match<br/>distance ≤ 2<br/>in first 5 tokens<br/>or all}
     H -->|No| I[Dictation mode]
     H -->|Yes| J{Command is<br/>stop word?}
-    J -->|Yes (stop/exit/bye)| K[Exit Kavi]
+    J -->|Yes: stop/exit/bye| K[Exit Kavi]
     J -->|No| L[Chat mode]
     I --> M[xdotool type at cursor]
     L --> N[Stream to llama-server]
@@ -157,7 +157,7 @@ gantt
 
 ```mermaid
 flowchart LR
-    Skill[brain/skills/<br/>kavi-voice-assistant.md<br/>YAML frontmatter]
+    Skill[config/kavi-config.md<br/>YAML frontmatter]
     Skill -->|load at startup| Kavi
     Skill -.->|edit + restart| Config[Config values]
     Config --> Kavi
@@ -183,19 +183,19 @@ Tunable via skill, no Python edit:
 | whisper base.en | 140 MB | `~/.cache/whisper.cpp/` | Fallback STT |
 | Parakeet TDT 0.6B v3 | 1.2 GB | `~/.cache/parakeet/ggml-model.bin` | Default STT (more accurate) |
 | Qwen 2.5 1.5B Instruct Q4_K_M | 1.07 GB | `~/.cache/llama.cpp/` | LLM for chat |
-| Piper voice (en_US-lessac-medium) | ~60 MB | `voice-enforcer/` | TTS, opt-in |
-| Tailscale IP (cf-openclaw) | n/a | not deployed | Optional remote hosting |
+| Piper voice (en_US-lessac-medium) | ~60 MB | fetched separately, opt-in | TTS, opt-in |
+| Remote VM | n/a | not deployed | Optional remote hosting, evaluated and rejected (see verdict below) |
 
 ## What's local vs what could be remote
 
-| Component | Local (laptop) | Remote (cf-openclaw) | Decision |
+| Component | Local (laptop) | Remote (small cloud VM) | Decision |
 |---|---|---|---|
 | Audio capture (pw-cat) | yes | no | Must be local (mic) |
 | VAD (webrtcvad) | yes | no | Lightweight, must be local |
 | STT (parakeet-cli / whisper-cli) | yes | yes | Local is faster. Remote option untested. |
-| LLM (llama-server) | yes (now) | yes | Local works. Remote would be slow (CPU only, D2as_v4). |
+| LLM (llama-server) | yes (now) | yes | Local works. Remote would be slow (CPU-only VM, no GPU). |
 | TTS (piper) | yes | no | Audio output, must be local |
 | xdotool | yes | no | Window injection, must be local |
 | xbindkeys | yes | no | Keyboard input, must be local |
 
-**Verdict:** Everything is local. The "remote" option is technically possible but not worth pursuing (D2as_v4 CPU is 5-10x slower than laptop GPU for this workload).
+**Verdict:** Everything is local. The "remote" option is technically possible but not worth pursuing (a CPU-only 2-vCPU cloud VM is 5-10x slower than the laptop GPU for this workload).

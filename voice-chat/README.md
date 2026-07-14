@@ -64,7 +64,6 @@ Already pulled by the voice-enforcer project at `~/.cache/llama.cpp/qwen2.5-1.5b
 - No TTS read-back. Future: piper.
 - No Claude API fallback. Future: optional integration.
 
-## Related
+## Note
 
-- Voice enforcer project: `$HOME/learn/Code/voice-enforcer/`
-- OOM postmortem (for the pre-flight pattern): `brain/pages/postmortems/2026-07-12-oom-hang.md`
+This is the legacy v0 prototype. The current, actively maintained version is Kavi: see the [main README](../README.md) and [CLAUDE.md](CLAUDE.md) in this directory.

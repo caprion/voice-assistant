@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # start-llama-server.sh - persistent llama.cpp server for Kavi's LLM path.
-# Runs Qwen 2.5 1.5B on CPU (not GPU) so whisper-server keeps the GTX 960M's
-# 4GB VRAM to itself. CPU is fast enough here: ~15 tok/s, first token ~0.6s.
+# Runs Qwen 2.5 1.5B on CPU (not GPU) so the STT server keeps the GPU's
+# limited VRAM to itself. CPU is fast enough here: ~15 tok/s, first token ~0.6s.
 set -euo pipefail
 
 BIN="${LLAMA_SERVER_BIN:-$HOME/learn/llama.cpp/build-cuda/bin/llama-server}"

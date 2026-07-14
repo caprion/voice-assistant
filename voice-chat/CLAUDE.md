@@ -146,7 +146,7 @@ Idle (waiting for hotkey, both servers warm): ~1.5-1.8 GB RAM, ~150-500 MB VRAM,
 
 ## Skill
 
-Intelligence lives in `brain/skills/kavi-voice-assistant.md` (YAML frontmatter for tunable config). To change wake word, fuzzy threshold, VAD parameters, end-of-utterance silence: edit the skill, restart Kavi.
+Intelligence lives in `config/kavi-config.md` (YAML frontmatter for tunable config). To change wake word, fuzzy threshold, VAD parameters, end-of-utterance silence: edit that file, restart Kavi.
 
 ## Known issues
 

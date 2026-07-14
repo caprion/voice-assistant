@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-kavi.py - Voice assistant harness. Intelligence lives in the kavi-voice-assistant
-skill; this file is plumbing. See: brain/skills/kavi-voice-assistant.md
+kavi.py - Voice assistant harness. Intelligence lives in config/kavi-config.md;
+this file is plumbing.
 """
 
 import argparse
@@ -21,7 +21,7 @@ import onnxruntime as ort
 import sounddevice as sd
 
 # --- Skill load (source of truth for tunable constants) ---
-SKILL_PATH = os.environ.get("KAVI_SKILL_PATH", str(Path.home() / "learn/brain/skills/kavi-voice-assistant.md"))
+SKILL_PATH = os.environ.get("KAVI_SKILL_PATH", str(Path(__file__).resolve().parent.parent / "config" / "kavi-config.md"))
 SKILL = frontmatter.load(SKILL_PATH).get("config", {})
 WAKE_WORD = SKILL["wake_word"]
 FUZZY_THRESHOLD = SKILL["fuzzy_max_distance"]
