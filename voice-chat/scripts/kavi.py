@@ -21,7 +21,7 @@ import onnxruntime as ort
 import sounddevice as sd
 
 # --- Skill load (source of truth for tunable constants) ---
-SKILL_PATH = os.environ.get("KAVI_SKILL_PATH", "/home/nidhi/learn/brain/skills/kavi-voice-assistant.md")
+SKILL_PATH = os.environ.get("KAVI_SKILL_PATH", str(Path.home() / "learn/brain/skills/kavi-voice-assistant.md"))
 SKILL = frontmatter.load(SKILL_PATH).get("config", {})
 WAKE_WORD = SKILL["wake_word"]
 FUZZY_THRESHOLD = SKILL["fuzzy_max_distance"]
@@ -46,13 +46,13 @@ TRIGGER = Path.home() / ".cache" / "kavi" / "trigger"; TRIGGER.parent.mkdir(exis
 CHAT_TRIGGER = Path.home() / ".cache" / "kavi" / "chat_trigger"  # separate hotkey: force chat mode, skip wake-word matching
 STATE_FILE = Path.home() / ".cache" / "kavi" / "state"  # polled by the tray/dot indicator (idle|listening|processing)
 TOOLS = {
-    "whisper_bin": os.environ.get("WHISPER_BIN", "/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-cli"),
+    "whisper_bin": os.environ.get("WHISPER_BIN", str(Path.home() / "learn/whisper.cpp/build-cuda/bin/whisper-cli")),
     "whisper_model": os.environ.get("WHISPER_MODEL", str(Path.home() / ".cache/whisper.cpp/ggml-base.en.bin")),
-    "parakeet_bin": os.environ.get("PARAKEET_BIN", "/home/nidhi/learn/whisper.cpp/build-cuda/bin/parakeet-cli"),
+    "parakeet_bin": os.environ.get("PARAKEET_BIN", str(Path.home() / "learn/whisper.cpp/build-cuda/bin/parakeet-cli")),
     "parakeet_model": os.environ.get("PARAKEET_MODEL", str(Path.home() / ".cache/parakeet/ggml-model.bin")),
-    "llama_bin": os.environ.get("LLAMA_BIN", "/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli"),
+    "llama_bin": os.environ.get("LLAMA_BIN", str(Path.home() / "learn/llama.cpp/build-cuda/bin/llama-cli")),
     "llama_model": os.environ.get("LLAMA_MODEL", str(Path.home() / ".cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf")),
-    "piper_dir": os.environ.get("PIPER_VOICE_DIR", "/home/nidhi/learn/Code/voice-enforcer"),
+    "piper_dir": os.environ.get("PIPER_VOICE_DIR", str(Path.home() / "learn/Code/voice-enforcer")),
     "piper_voice": os.environ.get("PIPER_VOICE", "en_US-lessac-medium"),
 }
 WHISPER_SERVER_URL = os.environ.get("WHISPER_SERVER_URL", "http://127.0.0.1:8090/inference")

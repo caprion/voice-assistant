@@ -1,5 +1,7 @@
 # Kavi: a local voice assistant for Linux
 
+Built for Linux Mint (X11), and built specifically to run well on old laptops. No GPU, no cloud, no problem: Kavi is designed to be light enough for hardware most projects have long written off.
+
 Wispr Flow, but local. Press a hotkey, talk, and the text lands at your cursor. Press a different hotkey and talk to a local LLM instead. No cloud calls, no API keys, no network dependency at all.
 
 ## Why

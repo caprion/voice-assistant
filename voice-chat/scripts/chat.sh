@@ -12,11 +12,11 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WHISPER_BIN="${WHISPER_BIN:-/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-cli}"
+WHISPER_BIN="${WHISPER_BIN:-$HOME/learn/whisper.cpp/build-cuda/bin/whisper-cli}"
 WHISPER_MODEL="${WHISPER_MODEL:-$HOME/.cache/whisper.cpp/ggml-base.en.bin}"
-PARAKEET_BIN="${PARAKEET_BIN:-/home/nidhi/learn/whisper.cpp/build-cuda/bin/parakeet-cli}"
+PARAKEET_BIN="${PARAKEET_BIN:-$HOME/learn/whisper.cpp/build-cuda/bin/parakeet-cli}"
 PARAKEET_MODEL="${PARAKEET_MODEL:-$HOME/.cache/parakeet/ggml-model.bin}"
-LLAMA_BIN="${LLAMA_BIN:-/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli}"
+LLAMA_BIN="${LLAMA_BIN:-$HOME/learn/llama.cpp/build-cuda/bin/llama-cli}"
 LLAMA_MODEL="${LLAMA_MODEL:-$HOME/.cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
 STT_ENGINE="${STT_ENGINE:-parakeet}"
 CACHE_DIR="$PROJECT_DIR/cache"

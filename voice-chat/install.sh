@@ -10,12 +10,15 @@
 #   4. Reloads systemd, enables the three services (autostart at login),
 #      and starts them now.
 #
-# To install on a second machine: copy this whole repo over, edit
-# config/kavi.env.example to match that machine's paths/ports BEFORE
-# running this script (or edit ~/.config/kavi/kavi.env after first run).
+# To install on a second machine: copy this whole repo over and run this
+# script. It fills in your $HOME and repo path automatically. Only edit
+# ~/.config/kavi/kavi.env afterwards if your binaries/models live somewhere
+# other than the defaults (whisper.cpp/llama.cpp under ~/learn, models
+# under ~/.cache - see comments in config/kavi.env.example).
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$PROJECT_DIR/.." && pwd)"
 CONFIG_DIR="$HOME/.config/kavi"
 SYSTEMD_DIR="$HOME/.config/systemd/user"
 BIN_DIR="$HOME/.local/bin"
@@ -24,8 +27,9 @@ mkdir -p "$CONFIG_DIR" "$SYSTEMD_DIR" "$BIN_DIR"
 
 # --- 1. Config file (never overwrite existing) ---
 if [[ ! -f "$CONFIG_DIR/kavi.env" ]]; then
-    cp "$PROJECT_DIR/config/kavi.env.example" "$CONFIG_DIR/kavi.env"
-    echo "Created $CONFIG_DIR/kavi.env from template. Edit it if paths differ on this machine."
+    sed -e "s#__HOME__#$HOME#g" -e "s#__REPO_DIR__#$REPO_DIR#g" \
+        "$PROJECT_DIR/config/kavi.env.example" > "$CONFIG_DIR/kavi.env"
+    echo "Created $CONFIG_DIR/kavi.env from template (paths filled in for this machine)."
 else
     echo "$CONFIG_DIR/kavi.env already exists, leaving it alone."
 fi

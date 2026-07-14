@@ -19,7 +19,7 @@ pw-cat (PipeWire mic capture)
 ### 1. Build whisper.cpp (CUDA SM 5.0)
 
 ```bash
-cd /home/nidhi/learn/whisper.cpp
+cd $HOME/learn/whisper.cpp
 mkdir build-cuda && cd build-cuda
 cmake .. -DGGML_CUDA=ON -DCMAKE_CUDA_ARCHITECTURES=50 -DCMAKE_BUILD_TYPE=Release -G Ninja
 ninja
@@ -66,5 +66,5 @@ Already pulled by the voice-enforcer project at `~/.cache/llama.cpp/qwen2.5-1.5b
 
 ## Related
 
-- Voice enforcer project: `/home/nidhi/learn/Code/voice-enforcer/`
+- Voice enforcer project: `$HOME/learn/Code/voice-enforcer/`
 - OOM postmortem (for the pre-flight pattern): `brain/pages/postmortems/2026-07-12-oom-hang.md`

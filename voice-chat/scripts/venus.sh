@@ -14,14 +14,14 @@
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WHISPER_BIN="${WHISPER_BIN:-/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-cli}"
+WHISPER_BIN="${WHISPER_BIN:-$HOME/learn/whisper.cpp/build-cuda/bin/whisper-cli}"
 WHISPER_MODEL="${WHISPER_MODEL:-$HOME/.cache/whisper.cpp/ggml-base.en.bin}"
-PARAKEET_BIN="${PARAKEET_BIN:-/home/nidhi/learn/whisper.cpp/build-cuda/bin/parakeet-cli}"
+PARAKEET_BIN="${PARAKEET_BIN:-$HOME/learn/whisper.cpp/build-cuda/bin/parakeet-cli}"
 PARAKEET_MODEL="${PARAKEET_MODEL:-$HOME/.cache/parakeet/ggml-model.bin}"
-LLAMA_BIN="${LLAMA_BIN:-/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli}"
+LLAMA_BIN="${LLAMA_BIN:-$HOME/learn/llama.cpp/build-cuda/bin/llama-cli}"
 LLAMA_MODEL="${LLAMA_MODEL:-$HOME/.cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
 PIPER_VOICE="${PIPER_VOICE:-en_US-lessac-medium}"
-PIPER_VOICE_DIR="${PIPER_VOICE_DIR:-/home/nidhi/learn/Code/voice-enforcer}"
+PIPER_VOICE_DIR="${PIPER_VOICE_DIR:-$HOME/learn/Code/voice-enforcer}"
 STT_ENGINE="${STT_ENGINE:-parakeet}"
 ENABLE_TTS=true
 DURATION=5
@@ -66,7 +66,7 @@ speak() {
     local text="$1"
     if ! $ENABLE_TTS; then return 0; fi
     local wav="$PROJECT_DIR/cache/venus_response.wav"
-    source /home/nidhi/learn/Code/voice-enforcer/.venv/bin/activate 2>/dev/null || true
+    source $HOME/learn/Code/voice-enforcer/.venv/bin/activate 2>/dev/null || true
     python3 << PYEOF 2>/dev/null
 import piper, wave
 voice = piper.PiperVoice.load('${PIPER_VOICE_DIR}/${PIPER_VOICE}.onnx',

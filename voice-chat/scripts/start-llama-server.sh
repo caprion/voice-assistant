@@ -4,7 +4,7 @@
 # 4GB VRAM to itself. CPU is fast enough here: ~15 tok/s, first token ~0.6s.
 set -euo pipefail
 
-BIN="${LLAMA_SERVER_BIN:-/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-server}"
+BIN="${LLAMA_SERVER_BIN:-$HOME/learn/llama.cpp/build-cuda/bin/llama-server}"
 MODEL="${LLAMA_MODEL:-$HOME/.cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf}"
 HOST="${LLAMA_SERVER_HOST:-127.0.0.1}"
 PORT="${LLAMA_SERVER_PORT:-8081}"

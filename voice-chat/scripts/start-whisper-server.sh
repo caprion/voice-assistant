@@ -9,7 +9,7 @@
 # subprocess path (accuracy fallback, slower, see CLAUDE.md).
 set -euo pipefail
 
-BIN="${WHISPER_SERVER_BIN:-/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-server}"
+BIN="${WHISPER_SERVER_BIN:-$HOME/learn/whisper.cpp/build-cuda/bin/whisper-server}"
 MODEL="${WHISPER_MODEL:-$HOME/.cache/whisper.cpp/ggml-base.en.bin}"
 HOST="${WHISPER_SERVER_HOST:-127.0.0.1}"
 PORT="${WHISPER_SERVER_PORT:-8090}"

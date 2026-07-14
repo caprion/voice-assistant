@@ -23,10 +23,10 @@ Typing into the terminal takes focus. Talking doesn't. For short queries and qui
 |---|---|---|
 | Audio capture | `pw-cat` or `arecord` | system |
 | STT (default) | `whisper-server` (persistent, GPU, base.en) | `127.0.0.1:8090`, started by `scripts/start-whisper-server.sh` |
-| STT (fallback) | `whisper-cli` subprocess if server unreachable | `/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-cli` |
+| STT (fallback) | `whisper-cli` subprocess if server unreachable | `$HOME/learn/whisper.cpp/build-cuda/bin/whisper-cli` |
 | STT (accuracy alt) | `parakeet-cli` subprocess (`--stt parakeet`, no server support, per-cycle reload) | same dir |
 | LLM | `llama-server` (persistent, CPU, streaming) | `127.0.0.1:8081`, `-ngl 0 --threads 3 --parallel 1` |
-| LLM (fallback) | `llama-cli` subprocess if server unreachable | `/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli` |
+| LLM (fallback) | `llama-cli` subprocess if server unreachable | `$HOME/learn/llama.cpp/build-cuda/bin/llama-cli` |
 | TTS (opt-in via `--tts`) | piper (en_US-lessac-medium) | `~/.cache/piper/` |
 | Text injection | `xdotool type` | system |
 | Hotkey | `xbindkeys` → flag file | `~/.xbindkeysrc` |
@@ -116,7 +116,7 @@ Manual/dev startup (bypassing systemd, e.g. for quick local testing):
 cd voice-chat/scripts
 nohup ./start-whisper-server.sh > /tmp/whisper-server.log 2>&1 & disown
 nohup ./start-llama-server.sh > /tmp/llama-server.log 2>&1 & disown
-cd /home/nidhi/learn/Code/voice-assistant/voice-chat
+cd $HOME/learn/Code/voice-assistant/voice-chat
 nohup python3 -u scripts/kavi.py > /tmp/kavi.log 2>&1 & disown
 ```
 
