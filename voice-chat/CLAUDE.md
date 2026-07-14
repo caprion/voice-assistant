@@ -22,10 +22,12 @@ Typing into the terminal takes focus. Talking doesn't. For short queries and qui
 | Layer | Tool | Path |
 |---|---|---|
 | Audio capture | `pw-cat` or `arecord` | system |
-| STT (default) | `parakeet-cli` (CUDA SM 5.0) | `/home/nidhi/learn/whisper.cpp/build-cuda/bin/parakeet-cli` |
-| STT (fallback) | `whisper-cli` (CUDA SM 5.0) | same dir |
-| LLM | `llama-cli` (CUDA SM 5.0) | `/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli` |
-| TTS (opt-in) | piper (en_US-lessac-medium) | `~/.cache/piper/` |
+| STT (default) | `whisper-server` (persistent, GPU, base.en) | `127.0.0.1:8090`, started by `scripts/start-whisper-server.sh` |
+| STT (fallback) | `whisper-cli` subprocess if server unreachable | `/home/nidhi/learn/whisper.cpp/build-cuda/bin/whisper-cli` |
+| STT (accuracy alt) | `parakeet-cli` subprocess (`--stt parakeet`, no server support, per-cycle reload) | same dir |
+| LLM | `llama-server` (persistent, CPU, streaming) | `127.0.0.1:8081`, `-ngl 0 --threads 3 --parallel 1` |
+| LLM (fallback) | `llama-cli` subprocess if server unreachable | `/home/nidhi/learn/llama.cpp/build-cuda/bin/llama-cli` |
+| TTS (opt-in via `--tts`) | piper (en_US-lessac-medium) | `~/.cache/piper/` |
 | Text injection | `xdotool type` | system |
 | Hotkey | `xbindkeys` → flag file | `~/.xbindkeysrc` |
 
@@ -33,14 +35,15 @@ Typing into the terminal takes focus. Talking doesn't. For short queries and qui
 
 | Model | Path | Size |
 |---|---|---|
-| Parakeet TDT 0.6B v3 (default STT) | `~/.cache/parakeet/ggml-model.bin` | 1.2 GB |
-| Whisper base.en (fallback) | `~/.cache/whisper.cpp/ggml-base.en.bin` | 140 MB |
-| Qwen 2.5 1.5B Instruct Q4_K_M (LLM) | `~/.cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf` | 1.07 GB |
+| Whisper base.en (default STT, served warm) | `~/.cache/whisper.cpp/ggml-base.en.bin` | 140 MB |
+| Parakeet TDT 0.6B v3 (accuracy alt, `--stt parakeet`) | `~/.cache/parakeet/ggml-model.bin` | 1.2 GB |
+| Qwen 2.5 1.5B Instruct Q4_K_M (LLM, served warm) | `~/.cache/llama.cpp/qwen2.5-1.5b-instruct-q4_k_m.gguf` | 1.07 GB |
 
 ## Files
 
-- `scripts/kavi.py` — main voice assistant (270 lines, config from skill)
+- `scripts/kavi.py` — main voice assistant (config from skill)
 - `scripts/kavi-trigger.sh` — xbindkeys hotkey trigger
+- `scripts/start-whisper-server.sh` — persistent whisper-server (STT), start before Kavi
 - `scripts/chat.sh` — legacy v0 (fixed 5s cuts, superseded)
 - `scripts/venus.sh` — legacy wake-word prototype
 - `cache/` — temporary WAV files (gitignored)
@@ -55,30 +58,57 @@ Print Screen or Right Ctrl → `kavi-trigger.sh` → flag file → Kavi cycle.
 - **Hotkey mode (default)**: Print Screen triggers one record-transcribe-dispatch cycle.
 - `--always-on`: continuously listening (heavier on CPU, opt-in).
 - `--once`: run one cycle and exit (for testing).
-- `--no-tts`: text-only response, no Piper playback.
-- `--stt whisper`: use whisper base.en instead of Parakeet (lighter CPU, lower accuracy).
+- `--tts`: enable Piper TTS reply in chat mode (default: text only, opt-in).
+- `--stt parakeet`: use Parakeet instead of whisper base.en (more accurate, no persistent server, ~1.4s reload per cycle).
 
-## Resource profile (typical cycle)
+## Startup (both servers, then Kavi)
+
+Kavi is installed as a proper app (systemd `--user` services). Normal usage:
+
+```bash
+kavi start      # start all three services (or they're already autostarted at login)
+kavi status     # check health
+kavi logs       # follow the daemon log
+kavi stop       # stop everything
+```
+
+First-time setup on a machine (or after `git pull`):
+```bash
+cd voice-chat && ./install.sh
+```
+
+Manual/dev startup (bypassing systemd, e.g. for quick local testing):
+```bash
+cd voice-chat/scripts
+nohup ./start-whisper-server.sh > /tmp/whisper-server.log 2>&1 & disown
+nohup ./start-llama-server.sh > /tmp/llama-server.log 2>&1 & disown
+cd /home/nidhi/learn/Code/voice-assistant/voice-chat
+nohup python3 -u scripts/kavi.py > /tmp/kavi.log 2>&1 & disown
+```
+
+## Resource profile (typical cycle, measured)
 
 | Component | CPU peak | VRAM | Duration |
 |---|---|---|---|
-| VAD recording | low | 0 | until silence |
-| Parakeet STT | ~100% (1 core) | 1.3 GB | 1.5-2 sec |
-| Qwen LLM (if chat) | ~100% (1 core) | 1.3 GB | 3-5 sec |
-| Piper TTS (if enabled) | low | 0 | 0.5-1 sec |
-| xdotool type | low | 0 | <0.5 sec |
+| VAD recording | low | 0 | until 0.5s silence |
+| Whisper base.en STT (warm, via HTTP) | ~1 core briefly | ~150 MB | ~200-400ms round trip |
+| Parakeet STT (subprocess, `--stt parakeet`) | ~100% (1 core) | 1.3 GB | ~1.4-2 sec (model reload each cycle) |
+| Qwen LLM (if chat, warm, streaming) | ~3 cores briefly | 0 (CPU only) | first token ~0.6s, full short reply ~1-2s |
+| Piper TTS (if `--tts`) | low | 0 | 0.5-1 sec |
+| xdotool type | low | 0 | <0.2 sec |
 
-Total cycle (dictation only): ~1.5-2 sec.
-Total cycle (chat, with TTS): ~5-9 sec.
-Idle (waiting for hotkey): ~0 CPU, ~0 VRAM.
+Total cycle (dictation only, whisper server warm): ~0.7-1 sec end-of-speech to text-at-cursor.
+Total cycle (chat, warm, no TTS): ~1.5-2.5 sec.
+Idle (waiting for hotkey, both servers warm): ~1.5-1.8 GB RAM, ~150-500 MB VRAM, ~0% CPU.
 
 ## Don't
 
 - Don't try nerd-dictation. VOSK is broken on PipeWire, xdotool works.
-- Don't add network calls. Voice chat is 100% local.
-- Don't run always-on mode on this hardware without expecting fan noise.
-- Don't enable TTS by default. It adds latency and audio device contention. Opt-in.
-- Don't try to add llama-server / whisper-server streaming. Per-cycle subprocess is fine for the user's use case (dictation is the primary mode, latency is acceptable).
+- Don't add network calls. Voice chat is 100% local (servers are localhost-only).
+- Don't run always-on mode on this hardware without expecting fan noise (per-cycle subprocess reload pegs a core continuously — see Iteration V1b in ITERATIONS.md).
+- Don't enable TTS by default. It adds latency and audio device contention. Opt-in via `--tts`.
+- Don't try to build true streaming STT partials (mid-speech). Already tried and reverted (fan noise, and it's not actually how Wispr Flow behaves — it does fast finalization after silence, not live word-by-word). Focus on shortening the VAD tail and keeping STT warm instead.
+- Don't try to warm Parakeet via whisper-server — whisper-server only serves whisper-family models, there's no server binary for Parakeet in this whisper.cpp build. If Parakeet needs to be warm, it requires a custom wrapper (not built, not currently worth the effort vs. whisper small.en).
 
 ## Skill
 
@@ -86,7 +116,6 @@ Intelligence lives in `brain/skills/kavi-voice-assistant.md` (YAML frontmatter f
 
 ## Known issues
 
-- Model reload per cycle (1-2 sec overhead). Persistent server would fix, but adds complexity. Not worth it for current use case.
-- Parakeet at 100% CPU during inference. Fan noise during cycles. This is the cost of local STT. Smaller model (whisper tiny) is an option if noise is too disruptive.
-- TTS uses Piper American English voice, doesn't match Indian English preference. Opt-in only.
-- No streaming LLM response. Each cycle waits for full response. Could use llama-server streaming in future.
+- Parakeet has no persistent server; `--stt parakeet` still pays the ~1.4s reload cost per cycle. Whisper base.en (default) does not have this problem anymore.
+- TTS uses Piper American English voice, doesn't match Indian English preference. Opt-in only via `--tts`.
+- whisper-server and llama-server must be started manually before Kavi (no autostart yet — deliberately deferred until this design settles, see STATE.md open work).

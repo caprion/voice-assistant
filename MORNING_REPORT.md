@@ -1,6 +1,6 @@
 # Morning Report — 2026-07-14
 
-> Status update from the overnight auto-mode session. Check this first when you wake up.
+> **STALE / HISTORICAL — do not treat as current state.** Written after an overnight session; several claims here (TTS off by default, "did not add llama-server streaming") were later found to be inaccurate or superseded. See `STATE.md` for current state. Kept for historical record only.
 
 ## TL;DR
 

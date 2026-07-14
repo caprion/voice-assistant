@@ -1,11 +1,11 @@
 # Voice Assistant — Project State
 
 > Captures where the project is, what works, what doesn't, and how to resume.
-> Last updated: 2026-07-13
+> Last updated: 2026-07-14
 
 ## What this is
 
-A local voice assistant for Linux, inspired by Wispr Flow. Architecture: hotkey → record with VAD → transcribe with local STT (whisper base.en or Parakeet TDT 0.6B) → smart dispatch → type at cursor or send to local LLM (Qwen 2.5 1.5B via llama-server) with streaming response.
+A local voice assistant for Linux, inspired by Wispr Flow. Architecture: hotkey → record with Silero VAD (neural, ONNX) → transcribe with local STT (whisper small.en, beam-size 5) → smart dispatch → type at cursor or send to local LLM (Qwen 2.5 1.5B via llama-server) with streaming response.
 
 All inference local on a 2015 Dell Inspiron 7559 (GTX 960M, 4 GB VRAM, 16 GB RAM, Linux Mint 22.3). No network calls during normal operation.
 
@@ -45,30 +45,37 @@ voice-assistant/
 **Goal:** Wispr Flow analog. Hotkey activation, dictation at cursor, optional chat with local LLM, optional TTS reply.
 
 **What we have (v0):**
-- `kavi.py` — voice assistant harness, ~280 lines, config loaded from skill
-- `kavi-trigger.sh` — xbindkeys hotkey trigger
-- `~/.xbindkeysrc` — Print Screen / Right Ctrl bindings
-- `~/.cache/kavi/trigger` — flag file (created on hotkey press)
+- `kavi.py` — voice assistant harness, config loaded from skill
+- `kavi-trigger.sh` — xbindkeys dictation/wake-word hotkey trigger (Right Ctrl / Pause)
+- `kavi-chat-trigger.sh` — xbindkeys forced-chat hotkey trigger (Menu key)
+- `kavi-indicator.py` — floating draggable state dot (idle/listening/processing)
+- `~/.xbindkeysrc` — Right Ctrl / Pause (dictation) + Menu (chat) bindings
+- `~/.cache/kavi/trigger`, `~/.cache/kavi/chat_trigger` — flag files (created on hotkey press)
+- `~/.cache/kavi/state` — polled by the indicator dot
+- 5 systemd `--user` services (autostart at login): `kavi.service`, `kavi-whisper-server.service`, `kavi-llama-server.service`, `kavi-xbindkeys.service`, `kavi-indicator.service`
 
 **What's working:**
-- Print Screen / Right Ctrl triggers recording via xbindkeys
-- VAD-based end-of-utterance detection (0.8s silence threshold)
-- Parakeet TDT 0.6B STT (1.5-2s per cycle, includes model load)
+- Right Ctrl / Pause → dictation-or-wake-word cycle; Menu key → forced chat cycle (skips wake-word matching entirely)
+- **Manual stop only**: press the same hotkey again to end recording — no auto-stop-on-silence, so pauses/thinking mid-sentence never cut you off (previously VAD-based end-of-utterance, removed 2026-07-14 per usability feedback)
+- Silero VAD (neural, ONNX) gates against false "no speech" bails — dramatically more robust to this laptop's fan/ambient noise than webrtcvad (which flagged 64-99% of ambient noise as speech, replaced 2026-07-14)
+- Whisper small.en STT via persistent whisper-server, beam-size 5 (free accuracy win, no latency cost measured)
 - Qwen 2.5 1.5B LLM response (3-5s for short queries)
-- Piper TTS reply (en_US-lessac-medium voice)
-- Fuzzy wake word match (Levenshtein distance ≤ 2)
-- Multi-token search (finds "Kavi" anywhere in first 5 tokens, supports "Hey Kavi, ...")
-- Smart dispatch: wake word → chat, otherwise → dictation at cursor via xdotool
+- Piper TTS reply (en_US-lessac-medium voice), opt-in via `--tts`
+- Fuzzy wake word match (Levenshtein distance ≤ 1, tightened from ≤2 2026-07-14 — distance 2 caught common words like "have"/"gave"/"cave" as false positives)
+- Multi-token search (finds "Kavi" anywhere in transcript, supports "Hey Kavi, ...")
+- Smart dispatch: Menu-key press or wake word → chat (reply via notification only); otherwise → dictation at cursor via xdotool
 - Audio gain warning if peak < 15% of max
+- Bracketed/parenthesized STT noise tags (e.g. `[BLANK_AUDIO]`, `(machine whirring)`) filtered before typing
 
 **What's not working / open issues:**
-1. **Model reload every cycle** — biggest cost. Each Parakeet call reloads 1.2 GB from disk (1-2s). Each Qwen call also pays startup cost. Fix: whisper-server + llama-server for persistent processes.
-2. **No streaming LLM response** — the user wants ChatGPT Live feel. Fix: llama-server's streaming HTTP endpoint, Kavi prints tokens as they arrive, TTS chunks by sentence.
-3. **No streaming STT partials** — we tried this but the Parakeet model load per partial was too expensive on this hardware. Real streaming would need a smaller model (whisper tiny) loaded persistently.
-4. **GPU contention** — Parakeet (1.5 GB) + Qwen (3 GB) = 4.5 GB, exceeds 4 GB VRAM. Current workaround: serialize. Fix: put one on CPU.
-5. **No autostart** — Kavi doesn't start at login. Add XDG autostart .desktop file.
+1. ~~Model reload every cycle~~ — **fixed 2026-07-14**: whisper-server (persistent, GPU, small.en) now serves STT via HTTP with subprocess fallback. Parakeet still per-cycle (no server support). llama-server (persistent, CPU) serves the LLM.
+2. ~~No streaming LLM response~~ — **fixed**: llama-server's `/v1/chat/completions?stream=true`, Kavi prints tokens as they arrive via httpx.stream. First token ~0.6s.
+3. **No streaming STT partials** — tried in Iteration V1b, reverted (fan noise from per-cycle model reload). Decided against retrying: this isn't actually how Wispr Flow behaves anyway (fast finalization after silence, not live word-by-word). Not on the roadmap.
+4. **GPU contention** — resolved by design: Qwen stays on CPU (`-ngl 0`), whisper small.en on GPU (~300MB). No contention at this model size. Would need reassessment if upsizing to whisper medium.en (~1.5GB) or if warming Parakeet.
+5. ~~No autostart~~ — **fixed 2026-07-14**: all 5 services run as systemd `--user` units, enabled at login via `install.sh`.
 6. **Locale handling** — Qwen occasionally drops the "k" prefix from "Kavi" in TTS output. Cosmetic.
-7. **No idle detection** — Kavi holds models in memory always. Fix: release after N minutes idle, reload on demand.
+7. **Noise isolation in loud environments** — not yet implemented. Proposed: RNNoise or PipeWire's built-in noise-suppression module, applied before VAD/STT. Flagged as follow-up, not started.
+7. **No idle detection** — servers stay warm always. Verified safe: ~1.5-1.8GB RAM, ~150-500MB VRAM steady-state, well within budget on 16GB/4GB hardware.
 
 ## File map (where things live)
 
@@ -143,7 +150,7 @@ ps aux | grep xbindkeys
 # 4. Check ~/.xbindkeysrc
 cat ~/.xbindkeysrc
 
-# 5. Trigger via Print Screen or Right Ctrl
+# 5. Trigger via Right Ctrl/Pause (dictation) or Menu key (chat)
 # 6. Watch log
 tail -f /tmp/kavi.log
 
@@ -153,33 +160,15 @@ cat /home/nidhi/learn/brain/skills/kavi-voice-assistant.md
 
 ## Open work — priority order for next session
 
-1. **whisper-server** for Parakeet TDT 0.6B
-   - Persistent process, model stays in memory
-   - Eliminates 1-2s per-cycle model load
-   - ~30 min of work
-   - File: `voice-chat/scripts/start-whisper-server.sh`
+1. ~~whisper-server for STT~~ — **done 2026-07-14**. Serving whisper small.en warm on GPU at 127.0.0.1:8090, beam-size 5. File: `voice-chat/scripts/start-whisper-server.sh`.
 
-2. **llama-server** for Qwen 2.5 1.5B
-   - Same idea — persistent process
-   - Enables streaming output via HTTP
-   - ~30 min
-   - File: `voice-chat/scripts/start-llama-server.sh`
+2. ~~llama-server for Qwen 2.5 1.5B~~ — **done**. Persistent, CPU-only, streaming enabled.
 
-3. **Mutex + streaming LLM response** in kavi.py
-   - Use httpx to call llama-server's `/v1/chat/completions` with `stream=True`
-   - Print tokens as they arrive in the log
-   - TTS chunk by sentence
-   - ~1-2 hours
+3. ~~Streaming LLM response~~ — **done**. httpx.stream against `/v1/chat/completions`, tokens print as they arrive.
 
-4. **XDG autostart** for Kavi daemon
-   - `~/.config/autostart/kavi.desktop` launches at login
-   - Optional: include whisper-server and llama-server startup
-   - ~15 min
+4. ~~XDG autostart for Kavi daemon~~ — **done 2026-07-14, superseded the XDG-autostart plan**: all 5 components (kavi, whisper-server, llama-server, xbindkeys, indicator) run as systemd `--user` services instead, enabled via `install.sh`. More robust than `.desktop` autostart (restart-on-failure, proper logs via journalctl).
 
-5. **GPU memory arbitration** between STT and LLM
-   - Currently serialize. Better: STT on GPU, LLM on CPU when both needed
-   - Or: smaller STT model (whisper tiny) to free VRAM for LLM
-   - Defer until v1 servers are running
+5. **GPU memory arbitration** — resolved for current model sizes (Qwen on CPU, whisper small.en on GPU, no contention). Revisit only if upsizing STT model further (e.g. medium.en).
 
 6. **Finalize the essay** (Path C framing for AE publish)
    - "Why training didn't fit" section instead of "training results"
@@ -190,6 +179,8 @@ cat /home/nidhi/learn/brain/skills/kavi-voice-assistant.md
 7. **Record demo** with Kavi in flowblade
    - Updated demo script already at `voice-enforcer/explainer/demo-script.md`
    - ~30 min of recording + 30 min of editing
+
+8. **Productize + multi-device** (new direction, 2026-07-14) — package Kavi as an installable app (systemd user services for the two servers + daemon, config file instead of hardcoded paths), and evaluate a client/server split so dictation triggers on any device while heavy inference optionally runs elsewhere (e.g. cf-openclaw for chat-only, latency-tolerant use). See `vm-sizing.md` for prior analysis of why cf-openclaw wasn't a good fit for the full latency-sensitive path.
 
 ## Auth
 
@@ -204,22 +195,48 @@ Once authed, all future pushes are: `git push caprion main`.
 ## Decisions made (for future reference)
 
 - **Base model: Qwen 2.5 1.5B** (Apache 2.0, fits VRAM for inference, multilingual tokenizer)
-- **STT model: Parakeet TDT 0.6B** (best accuracy/speed for laptops, built-in punctuation)
-- **TTS voice: piper en_US-lessac-medium** (American English, decent quality)
-- **Wake word: "Kavi"** with fuzzy match (Levenshtein ≤ 2, search first 5 tokens)
-- **VAD: webrtcvad aggressiveness 1** (sensitive enough for slow speakers)
-- **End-of-utterance: 0.8s silence** (conversational feel, fast response)
-- **8s silence bail** (handles accidental hotkey presses)
+- **STT model: whisper small.en (default, persistent server, beam-size 5)** — upgraded from base.en 2026-07-14 for better accuracy (2x slower per-cycle but negligible with beam search added at no extra cost measured). Parakeet TDT 0.6B available as accuracy alt via `--stt parakeet` but has no persistent server support, pays ~1.4s reload per cycle
+- **TTS voice: piper en_US-lessac-medium** (American English, decent quality), opt-in via `--tts`
+- **Wake word: "Kavi"** with fuzzy match (Levenshtein ≤ 1, tightened from ≤2 2026-07-14 — distance 2 false-matched common words like "have"/"gave"/"cave"/"wave"/"save")
+- **VAD: Silero (neural, ONNX)** — replaced webrtcvad 2026-07-14. webrtcvad flagged 64-99% of this laptop's ambient fan noise as speech even at max aggressiveness; Silero measured 0% false positives on the same sample. Requires the official 512-sample-chunk + 64-sample-context-prepend calling convention (`SileroVAD` class in `kavi.py`) — feeding bare frames without the context buffer silently returns near-zero probability for all audio, a very easy mistake to make.
+- **End-of-utterance: manual stop only** (2026-07-14) — auto-stop-on-silence removed entirely per usability feedback (any pause, even mid-thought, was cutting recordings short). Press the same hotkey again to end recording; `end_silence_sec`/`SILENCE_FRAMES` are now vestigial/unused.
+- **8s silence bail** (handles accidental hotkey presses with no speech at all — the only remaining auto-stop path)
 - **Training abandoned for Path C** (4 GB VRAM wall on Qwen 1.5B)
-- **No streaming STT partials** (model load too expensive for real-time on this hardware)
+- **No streaming STT partials** (tried, reverted — fan noise; also not how Wispr Flow actually behaves, it does fast finalization not live word-by-word)
 - **Hotkey activation default** (always-on is opt-in, not default)
+- **Two separate hotkeys** (2026-07-14): Right Ctrl/Pause → dictation-or-wake-word; Menu key → forced chat (skips wake-word fuzzy-matching entirely, more reliable than relying on saying "Kavi" mid-sentence)
+- **Floating state-dot indicator** (2026-07-14) — tkinter, draggable, position-persisted, polls `~/.cache/kavi/state`; gives instant visual feedback in lieu of true streaming STT partials
+- **Persistent whisper-server + llama-server, always warm** (2026-07-14) — measured safe on 16GB/4GB hardware (~1.5-1.8GB RAM, ~150-500MB VRAM steady state), idle-unloading rejected because cold-start would break the "instant" feel
+- **Kavi runs as systemd --user services** (2026-07-14) — 5 units total (kavi, whisper-server, llama-server, xbindkeys, indicator), autostart at login, restart-on-failure, no more manual nohup/disown; controlled via the `kavi` CLI (start/stop/restart/status/logs)
+- **Desktop notifications for chat responses, gain warnings, STT server fallback** (2026-07-14) — reduces need to keep a terminal open watching logs; dictation mode intentionally has no notification since the typed text at cursor is itself the feedback
 
 ## Performance baseline
 
 - Hotkey press → recording start: < 0.1s
-- Recording + VAD end: 0.8s after speech stops
-- STT (Parakeet full cycle including model load): 1.5-2s
-- LLM (Qwen full cycle including model load): 3-5s for short queries
+- Recording end: manual (second hotkey press) — no fixed VAD-silence delay anymore
+- STT (whisper small.en via persistent server, beam-size 5): ~2.1-2.4s for an 11s clip (beam search added no measurable latency over greedy)
+- LLM (Qwen via persistent streaming server): first token ~0.6s, full short reply ~1-1.5s (was 3-5s with per-cycle subprocess)
 - TTS (piper): 0.5-1s
-- Total cycle (cold): 5-9s
-- Total cycle (with persistent servers, future): 2-3s
+- Total cycle (dictation, measured 2026-07-14): recording length (user-controlled) + ~2-2.5s transcribe-to-typed
+- Total cycle (chat, streaming, no TTS): ~1.5-2.5s
+
+## Productization (2026-07-14)
+
+Kavi is now installed as a proper app on this laptop, not a set of scripts you manually nohup:
+
+- **Config**: `voice-chat/config/kavi.env.example` is the git-tracked template. `~/.config/kavi/kavi.env` is the live per-machine copy (never overwritten by `install.sh` if it already exists) — this is what makes the app portable to a second machine: copy the repo, edit this one file's paths/ports, run `install.sh`.
+- **Services**: `voice-chat/systemd/*.service` are git-tracked systemd `--user` unit templates, symlinked into `~/.config/systemd/user/` by `install.sh`. Three units: `kavi-whisper-server`, `kavi-llama-server`, `kavi` (the daemon, depends on the other two). All `Restart=on-failure`, all `WantedBy=default.target` (autostart at login).
+- **CLI**: `voice-chat/scripts/kavi-cli.sh` is git-tracked, symlinked to `~/.local/bin/kavi`. Commands: `kavi start|stop|restart|status|logs [whisper|llama]`.
+- **Install/reinstall**: `cd voice-chat && ./install.sh` — idempotent, safe to re-run after `git pull`.
+- **Feedback without a terminal**: desktop notifications (`notify-send`) fire on chat responses, low mic gain, and STT-server-down fallback. Dictation mode deliberately has no notification — the typed text at the cursor is the feedback.
+
+## Cross-device direction (design only, not built — 2026-07-14)
+
+Sumit's stated north star: eventually trigger Kavi from other devices over Tailscale, this laptop stays the only inference host (it has the only GPU in the mix). The natural shape, when this is picked up:
+
+- **This laptop remains the sole inference host.** Whisper-server and llama-server stay bound to `127.0.0.1` — do not expose them directly on the tailnet interface without adding authentication first. Raw `/inference` and `/v1/chat/completions` endpoints have no auth; anyone on the tailnet could hit them if bound to the Tailscale IP.
+- **Other devices run a thin audio-relay client**, not their own STT/LLM: capture mic → stream/send audio over the tailnet to a small relay endpoint on this laptop → this laptop's Kavi does VAD/STT/dispatch/LLM as normal → result (text or spoken reply) relayed back to the originating device. This avoids needing GPU/CPU capacity on the other device and keeps one codebase for the actual intelligence.
+- **cf-openclaw specifically**: per `vm-sizing.md`, it's CPU-only with no GPU, 2-5 tok/s for the LLM and slow STT — not a good *inference* host. Its plausible role in this design is as a *relay/reachability point* (already on the tailnet, always up) rather than doing any model inference itself, if the laptop is sometimes offline and something needs a queue/buffer. Not needed for the simple case of "phone or other laptop talks to my running laptop over Tailscale directly."
+- **Trigger mechanism changes**: the current hotkey → flag-file → poll loop is inherently single-machine (X11, xbindkeys). A remote trigger needs a different entry point — e.g. a small authenticated HTTP endpoint on Kavi (`POST /trigger` with the audio attached, or a push-to-talk button in a companion app) rather than the flag file, since other devices can't write to this laptop's local filesystem or fire X11 hotkeys.
+- **Security is the main unresolved question**: Tailscale itself provides network-level access control (only your tailnet devices can reach the laptop), but the services have zero application-level auth today. Before opening anything beyond `127.0.0.1`, add at minimum a shared-secret header check on any new endpoint.
+- **Not started.** This is a planning note for when the "get this laptop right" phase is done. No networking changes have been made — all three services remain `127.0.0.1`-only right now.

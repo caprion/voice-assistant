@@ -1,0 +1,19 @@
+# Kavi - floating state indicator (small dot: idle/listening/processing)
+#
+# Polls ~/.cache/kavi/state (written by kavi.py) and shows a tiny always-on-top
+# dot in the bottom-right corner. Purely cosmetic - if this isn't running,
+# Kavi itself still works fine, you just lose the visual "is it hearing me?"
+# feedback.
+[Unit]
+Description=Kavi - floating state indicator dot
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/learn/Code/voice-assistant/voice-enforcer/.venv/bin/python3 %h/learn/Code/voice-assistant/voice-chat/scripts/kavi-indicator.py
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -13,35 +13,38 @@ Runs on modest hardware. No network calls during normal operation.
 ## Quick start
 
 ```bash
-# Activate venv (created during initial setup)
 cd voice-chat
-source ../voice-enforcer/.venv/bin/activate
+./install.sh        # first time only (or after git pull) - sets up systemd services + CLI
+kavi status          # check all 5 services are running (whisper, llama, kavi, xbindkeys, indicator)
+kavi logs            # follow the daemon log
 
-# Start Kavi (hotkey mode)
-nohup python3 -u scripts/kavi.py > /tmp/kavi.log 2>&1 &
-disown
-
-# Trigger: Print Screen or Right Ctrl (configured in ~/.xbindkeysrc)
-# Watch log
-tail -f /tmp/kavi.log
+# Dictation: Right Ctrl (or Pause) - press once to start, press again to stop
+# Chat: Menu key - press once to start, press again to stop, always routed to the LLM
 ```
+
+Kavi autostarts at login via systemd `--user` services (no manual nohup needed). See `voice-chat/CLAUDE.md` for the manual/dev startup path.
 
 ## Architecture
 
 ```
-[Print Screen] → xbindkeys → ~/.cache/kavi/trigger (flag file)
+[Right Ctrl] → xbindkeys → ~/.cache/kavi/trigger (flag file)        [dictation/wake-word cycle]
+[Menu key]   → xbindkeys → ~/.cache/kavi/chat_trigger (flag file)   [forced chat cycle]
                                           ↓
-[Kavi daemon] ← (polls flag every 100ms)
+[Kavi daemon] ← (polls flag files every 100ms)
     ↓
-[Audio capture with VAD] → 0.8s silence = end of utterance
-    ↓
-[STT: Parakeet TDT 0.6B via whisper.cpp]
+[Audio capture, Silero VAD] → recording ends on a second press of the same hotkey
+    ↓                          (manual stop only - no auto-stop-on-silence, so pauses
+    ↓                           mid-thought never cut you off)
+[STT: whisper small.en via persistent whisper-server (HTTP), beam-size 5]
     ↓
 [Transcript]
     ↓
 [Smart dispatch]
-    ├─ wake word "Kavi" detected → [LLM: Qwen 2.5 1.5B] → [TTS: piper] → speaker
-    └─ no wake word → [xdotool type at cursor] (dictation)
+    ├─ Menu-key press (forced chat) OR wake word "Kavi" fuzzy-matched (Right Ctrl path)
+    │     → [LLM: Qwen 2.5 1.5B via persistent llama-server, streaming] → desktop notification (+ TTS if --tts)
+    └─ Right Ctrl, no wake word → [xdotool type at cursor] (dictation)
+
+[Floating state dot] ← polls ~/.cache/kavi/state (idle/listening/processing), draggable
 ```
 
 ## Hardware target

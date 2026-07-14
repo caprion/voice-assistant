@@ -1,0 +1,13 @@
+[Unit]
+Description=Kavi - llama-server (persistent LLM for voice assistant chat mode)
+After=graphical-session.target
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/kavi/kavi.env
+ExecStart=%h/learn/Code/voice-assistant/voice-chat/scripts/start-llama-server.sh
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

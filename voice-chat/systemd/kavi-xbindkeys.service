@@ -1,0 +1,17 @@
+# Kavi - xbindkeys (hotkey listener for Right Ctrl / Pause -> kavi-trigger.sh)
+#
+# Without this running, the Kavi daemon never receives a trigger signal -
+# the hotkeys are inert. Reads bindings from ~/.xbindkeysrc.
+[Unit]
+Description=Kavi - xbindkeys hotkey listener (Right Ctrl / Pause trigger)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/xbindkeys -n -v
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

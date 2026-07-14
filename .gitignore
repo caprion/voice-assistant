@@ -33,3 +33,7 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+
+# voice-enforcer is an independently git-managed project nested in this repo
+# (its own local .git, no remote). Excluded here to avoid embedded-repo issues.
+voice-enforcer/
