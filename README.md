@@ -73,4 +73,4 @@ Kavi loads its tunable config from [`voice-chat/config/kavi-config.md`](voice-ch
 
 ## License
 
-Private. Not for distribution.
+MIT. See [`LICENSE`](LICENSE).
