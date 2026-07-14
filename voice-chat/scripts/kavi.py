@@ -61,6 +61,13 @@ class Kavi:
         self.stt = stt
         self.tts = tts
         self.vad = webrtcvad.Vad(VAD_LEVEL)
+        self.busy = False  # mutex: only one cycle at a time (Kavi is single-threaded)
+        # Threading model: Kavi is single-threaded. Each cycle is atomic.
+        # llama-server runs in a separate process and handles its own concurrency
+        # via its slot system. No threads spawned in Kavi for streaming LLM;
+        # httpx.stream is synchronous (read chunks as they arrive, no background).
+        # The mutex above prevents a second hotkey press from firing a second
+        # cycle while the first is still running.
 
     # --- Audio ---
 
@@ -170,6 +177,39 @@ class Kavi:
             print(f"[kavi] xdotool: {e}", file=sys.stderr)
 
     def ask_qwen(self, prompt: str) -> str:
+        """Stream from llama-server (persistent model, fast first-token). Fallback to subprocess."""
+        url = "http://127.0.0.1:8081/v1/chat/completions"
+        payload = {
+            "model": "Qwen2.5-1.5B-Instruct",
+            "messages": [{"role": "user", "content": prompt}],
+            "stream": True,
+            "max_tokens": 256,
+            "temperature": 0.7,
+        }
+        full = []
+        try:
+            import httpx
+            with httpx.stream("POST", url, json=payload, timeout=60) as r:
+                if r.status_code == 200:
+                    for line in r.iter_lines():
+                        if line.startswith("data: "):
+                            data = line[6:]
+                            if data.strip() == "[DONE]":
+                                break
+                            try:
+                                chunk = __import__("json").loads(data)
+                                delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                if delta:
+                                    print(delta, end="", flush=True)
+                                    full.append(delta)
+                            except __import__("json").JSONDecodeError:
+                                pass
+                    print()  # newline after stream
+                    return "".join(full).strip()
+        except Exception:
+            pass  # fall through to subprocess
+
+        # Fallback: subprocess llama-cli (no streaming, slower)
         try:
             out = subprocess.run(
                 ["nice", "-n", "10", TOOLS["llama_bin"], "-m", TOOLS["llama_model"], "-p", prompt,
@@ -207,11 +247,16 @@ class Kavi:
         transcript = self.transcribe(audio)
         if not transcript:
             print("[kavi] (empty)"); return None
-        # Filter garbage tokens (Whisper special tokens, model artifacts)
-        garbage = ("<|endoftext|>", "<|notimestamps|>", "[BLANK_AUDIO]", "[inaudible]",
-                   "(blank audio)", "(music)", "(silence)")
-        if transcript.strip().lower() in garbage or all(g in transcript.lower() for g in garbage if "<|" in g):
-            print(f"[kavi] (garbage: {transcript[:40]}...)")
+        # Strip whisper's special tokens (appended to most outputs, not actual garbage)
+        for tok in ("<|endoftext|>", "<|notimestamps|>"):
+            transcript = transcript.replace(tok, "").strip()
+        # Filter actual garbage: parenthesized noise, very short
+        stripped = transcript.strip()
+        if stripped.startswith("(") and stripped.endswith(")"):
+            print(f"[kavi] (garbage: noise) {stripped[:40]}")
+            return None
+        if len(stripped) < 3:
+            print(f"[kavi] (garbage: too short) {stripped}")
             return None
         print(f"[kavi] heard: {transcript}")
 
@@ -231,17 +276,22 @@ class Kavi:
         self.type_at_cursor(transcript)
 
     def watch_trigger(self) -> None:
-        """Print Screen hotkey mode (default). Cooldown between cycles lets the system breathe."""
+        """Print Screen hotkey mode (default). Cooldown between cycles lets the system breathe.
+        Mutex prevents second press from firing concurrent cycle."""
         print(f"[kavi] mode=trigger  stt={self.stt}  tts={self.tts}")
         print(f"[kavi] waiting for Print Screen (or Right Ctrl) hotkey. Ctrl+C to exit.")
         TRIGGER.unlink(missing_ok=True)
         try:
             while True:
-                if TRIGGER.exists():
+                if TRIGGER.exists() and not self.busy:
                     TRIGGER.unlink()
                     print("\n[kavi] cycle")
-                    if self.run_cycle() == "exit":
-                        break
+                    self.busy = True
+                    try:
+                        if self.run_cycle() == "exit":
+                            break
+                    finally:
+                        self.busy = False
                     print("[kavi] ready")
                     time.sleep(0.2)  # cooldown: let CPU/GPU settle
                 time.sleep(0.1)
