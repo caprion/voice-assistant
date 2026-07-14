@@ -154,9 +154,14 @@ class Kavi:
         return prev[-1]
 
     def parse_wake_word(self, transcript: str) -> tuple[bool, str]:
-        """Fuzzy match WAKE_WORD within first SEARCH_TOKENS tokens. See skill for why."""
-        tokens = [t.lower() for t in re.split(r"[\s,.\?!]+", transcript.strip()) if t]
-        for i, tok in enumerate(tokens[:SEARCH_TOKENS]):
+        """Fuzzy match WAKE_WORD within transcript. Searches all tokens by default
+        (so 'Hey, Kavi, are you there?' still matches Kavi at position 3).
+        Set wake_word_search_all=false in skill to limit to first SEARCH_TOKENS."""
+        text = transcript.strip()
+        tokens = [t.lower() for t in re.split(r"[\s,.\?!]+", text) if t]
+        search_all = SKILL.get("wake_word_search_all", True)
+        search_tokens = tokens if search_all else tokens[:SEARCH_TOKENS]
+        for i, tok in enumerate(search_tokens):
             if self._word_distance(tok, WAKE_WORD) <= FUZZY_THRESHOLD:
                 rest = " ".join(tokens[i + 1:]).strip()
                 if rest.lower() in STOP_WORDS:
