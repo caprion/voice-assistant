@@ -5,7 +5,7 @@
 
 ## What this is
 
-A local voice assistant for Linux, inspired by Wispr Flow. Architecture: hotkey → record with VAD → transcribe with local STT (Parakeet TDT 0.6B) → dispatch (type at cursor, or send to local LLM Qwen 2.5 1.5B for chat with TTS reply).
+A local voice assistant for Linux, inspired by Wispr Flow. Architecture: hotkey → record with VAD → transcribe with local STT (whisper base.en or Parakeet TDT 0.6B) → smart dispatch → type at cursor or send to local LLM (Qwen 2.5 1.5B via llama-server) with streaming response.
 
 All inference local on a 2015 Dell Inspiron 7559 (GTX 960M, 4 GB VRAM, 16 GB RAM, Linux Mint 22.3). No network calls during normal operation.
 

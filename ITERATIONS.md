@@ -240,6 +240,92 @@ While the voice-enforcer was hitting walls, we started building Kavi (voice-chat
 
 - **Wake word search depth matters more than wake word choice.** "Kavi" vs "Lyra" vs "Coda" — the choice matters less than supporting "Hey Kavi, ..." patterns. Search depth was the bigger win.
 
+## Iteration V2: streaming LLM response + production hardening (MORNING SESSION)
+
+**Approach:** Replace per-cycle llama-cli subprocess call with persistent llama-server (HTTP, model in memory). Use SSE for token-by-token streaming. Add mutex, garbage filter, hotkey fixes.
+
+### V2a: llama-server setup (success)
+
+Built llama-server locally with Qwen 1.5B Q4_K_M, CPU only (since GPU holds Parakeet). Listens on 127.0.0.1:8081. Model loaded once, stays in memory (~1.4 GB RAM).
+
+Test of streaming HTTP call:
+- First token: 0.61s
+- Full response: 1.10s for "The capital of France is Paris."
+- Works. Tokens appear progressively.
+
+**Lesson:** Persistent server + streaming HTTP = real streaming feel. Per-cycle subprocess is too slow for "ChatGPT Live" UX.
+
+### V2b: Kavi streaming integration (success)
+
+Updated `ask_qwen` in kavi.py to use `httpx.stream` against llama-server. Prints each SSE chunk to the log as it arrives. Falls back to subprocess llama-cli if llama-server is down.
+
+Added mutex (`self.busy = True` around cycle execution) to prevent second hotkey press from firing concurrent cycle. Kavi is single-threaded; the mutex is belt-and-suspenders.
+
+### V2c: hardware debugging (mostly success)
+
+Tested the chain end-to-end. Three real bugs surfaced:
+
+1. **xbindkeys path wrong.** When voice-chat was moved into voice-assistant/ subdirectory, `~/.xbindkeysrc` still pointed to the old path. xbindkeys fired the trigger script, but `bash` couldn't find it, no flag was created, Kavi never woke up. Fix: updated `~/.xbindkeysrc` to the new path.
+
+2. **Print Screen conflict.** Linux Mint binds Print Screen to the screenshot tool by default. Our xbindkeys binding couldn't reliably preempt it. Pressing Print fired BOTH the screenshot and the Kavi cycle. Fix: removed Print from xbindkeys, kept only Right Ctrl + Pause (no default action).
+
+3. **Mic clipping at 100% peak.** Mic gain was at 100% in PulseAudio. Audio saturated, distorted, Whisper heard noise. Fix: `pactl set-source-volume alsa_input.pci-0000_00_1f.3.analog-stereo 20%`. Peak now 81%, mean 3%, STT works.
+
+### V2d: filter fixes (success after iteration)
+
+First garbage filter rejected any transcript containing `<|endoftext|>`. But whisper.cpp appends this token to every output as end-of-sequence marker. So all real speech was being filtered as "special token garbage."
+
+Fix: strip the special tokens from the transcript, then check for actual noise (parenthesized patterns, very short).
+
+```python
+# Strip (don't reject)
+for tok in ("<|endoftext|>", "<|notimestamps|>"):
+    transcript = transcript.replace(tok, "").strip()
+# Then check noise
+if stripped.startswith("(") and stripped.endswith(")"):
+    return None  # parenthesized noise
+```
+
+### V2e: wake word search range (success)
+
+Old code only checked first 5 tokens. User said "Hey, Kavi, are you there?" — "Kavi" was at position 27, missed. Whole thing got typed as dictation.
+
+Fix: search all tokens by default. Added `wake_word_search_all: true` to skill config. Kavi.py respects this flag. Result: "Hey, Kavi, are you there?" now matches "Kavi" and routes to chat mode (after stripping, command = "are you there").
+
+### V2f: cf-openclaw evaluation (no action)
+
+Evaluated deploying llama-server + whisper-server to cf-openclaw (D2as_v4, 2 vCPU, 8 GB RAM, no GPU). Verdict: fits RAM but inference would be 10-25s per response (CPU only, no GPU). Laptop is 5-10x faster. Not worth deploying.
+
+Auto-mode classifier denied the SSH build command. No code deployed to cf-openclaw. Documented the analysis in `vm-sizing.md` (D2as: $73/mo, D4as: $146/mo, D8as: $293/mo, current budget ~$150/mo).
+
+### V2 final state
+
+```
+llama-server: running (PID 61827), Qwen 1.5B in RAM, ~1.4 GB
+Kavi:         STOPPED (clean state, user testing complete)
+xbindkeys:    STOPPED (user testing complete)
+GPU:          533 MiB used (llama-server model loaded)
+CPU:          idle
+```
+
+When user wants to test again:
+```bash
+cd voice-assistant/voice-chat
+../voice-enforcer/.venv/bin/python3 -u scripts/kavi.py --stt whisper --no-tts &
+xbindkeys &
+```
+
+### V2 lessons
+
+- **Strip special tokens, don't reject them.** whisper.cpp's `<|endoftext|>` is normal output, not garbage. Rejecting any transcript with it = rejecting all real speech.
+- **Volume matters more than skill config.** No skill tweak fixes 100% peak clipping. Hardware gain first, code second.
+- **Hotkey bindings conflict with desktop defaults.** Print Screen is bound to screenshot. xbindkeys can't always preempt. Pick a key with no default action.
+- **Search all tokens for wake word.** Limiting to first 5 missed natural patterns. "Hey, Kavi" was a real chat query that got typed.
+- **Persistent servers > per-call subprocess.** llama-server with streaming HTTP gives ChatGPT Live feel. Per-cycle subprocess was the wrong shape.
+- **Mutex matters even in single-threaded code.** Prevents "second press during cycle" from racing.
+
+## Files that capture this iteration
+
 ## Files that capture this iteration
 
 - `STATE.md` — current state, file map, open work
