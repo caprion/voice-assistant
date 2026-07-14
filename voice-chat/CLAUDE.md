@@ -139,7 +139,7 @@ Idle (waiting for hotkey, both servers warm): ~1.5-1.8 GB RAM, ~150-500 MB VRAM,
 
 - Don't try nerd-dictation. VOSK is broken on PipeWire, xdotool works.
 - Don't add network calls. Voice chat is 100% local (servers are localhost-only).
-- Don't run always-on mode on this hardware without expecting fan noise (per-cycle subprocess reload pegs a core continuously — see Iteration V1b in ITERATIONS.md).
+- Don't run always-on mode without expecting fan noise on lighter hardware (per-cycle subprocess reload pegs a core continuously).
 - Don't enable TTS by default. It adds latency and audio device contention. Opt-in via `--tts`.
 - Don't try to build true streaming STT partials (mid-speech). Already tried and reverted (fan noise, and it's not actually how Wispr Flow behaves — it does fast finalization after silence, not live word-by-word). Focus on shortening the VAD tail and keeping STT warm instead.
 - Don't try to warm Parakeet via whisper-server — whisper-server only serves whisper-family models, there's no server binary for Parakeet in this whisper.cpp build. If Parakeet needs to be warm, it requires a custom wrapper (not built, not currently worth the effort vs. whisper small.en).
@@ -152,7 +152,7 @@ Intelligence lives in `brain/skills/kavi-voice-assistant.md` (YAML frontmatter f
 
 - Parakeet has no persistent server; `--stt parakeet` still pays the ~1.4s reload cost per cycle. Whisper base.en (default) does not have this problem anymore.
 - TTS uses Piper American English voice, doesn't match Indian English preference. Opt-in only via `--tts`.
-- whisper-server and llama-server must be started manually before Kavi (no autostart yet — deliberately deferred until this design settles, see STATE.md open work).
+- whisper-server, llama-server, and Kavi all autostart via systemd `--user` services (installed by `./install.sh`). Manual startup (see above) is only needed for dev/debug bypass of systemd.
 
 ## Roadmap
 

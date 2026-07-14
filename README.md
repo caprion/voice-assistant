@@ -1,14 +1,17 @@
-# Voice Assistant
+# Kavi: a local voice assistant for Linux
 
-A local voice assistant for Linux, inspired by Wispr Flow. Hotkey activation, dictation at cursor, optional chat with local LLM.
+Wispr Flow, but local. Press a hotkey, talk, and the text lands at your cursor. Press a different hotkey and talk to a local LLM instead. No cloud calls, no API keys, no network dependency at all.
 
-Runs on modest hardware. No network calls during normal operation.
+## Why
 
-## What's here
+Typing breaks focus for short things: quick notes, commands, chat. Voice doesn't. Kavi gives you that without sending audio anywhere.
 
-- **`voice-enforcer/`** — fine-tuning pipeline for a writing-style cleanup model (Path C: training abandoned, base model ships instead)
-- **`voice-chat/`** — Kavi, the working voice assistant (this is where the action is)
-- **`STATE.md`** — comprehensive state, what's working, what's not, how to resume
+## What it does
+
+- **Dictation**: hold a hotkey, speak, release, and the transcript is typed at your cursor.
+- **Chat**: a separate hotkey routes speech to a local LLM and streams the reply back.
+- **Fully local**: speech-to-text (whisper.cpp), the LLM (llama.cpp), and text-to-speech (Piper, opt-in) all run on-device.
+- **Runs as a service**: systemd `--user` units autostart everything at login.
 
 ## Quick start
 
@@ -22,7 +25,14 @@ kavi logs            # follow the daemon log
 # Chat: Menu key - press once to start, press again to stop, always routed to the LLM
 ```
 
-Kavi autostarts at login via systemd `--user` services (no manual nohup needed). See `voice-chat/CLAUDE.md` for the manual/dev startup path.
+## Hardware target
+
+Kavi is built to run on modest, everyday hardware, not a workstation.
+
+- **Minimum**: any x86_64 Linux machine, 8 GB RAM, CPU-only. Everything falls back to CPU and still works, just slower.
+- **Recommended**: a discrete GPU with 4+ GB VRAM (Maxwell-generation or newer) speeds up STT and LLM inference noticeably.
+- **Developed and tested on**: a 2015 Dell Inspiron 7559 (i7-6700HQ, GTX 960M 4 GB VRAM, 16 GB RAM, Linux Mint 22.3, PipeWire). If it's smooth there, it'll be smooth on most machines built in the last decade.
+- Requires X11 (`xdotool`, `xbindkeys`). No Wayland support yet.
 
 ## Architecture
 
@@ -47,31 +57,17 @@ Kavi autostarts at login via systemd `--user` services (no manual nohup needed).
 [Floating state dot] ← polls ~/.cache/kavi/state (idle/listening/processing), draggable
 ```
 
-## Hardware target
+Full system diagrams (process topology, sequence flows, resource profile): [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-- 2015 Dell Inspiron 7559
-- GTX 960M (Maxwell SM 5.0, 4 GB VRAM)
-- 16 GB RAM
-- Linux Mint 22.3 (PipeWire 1.0.5)
-- Tested on X11 (xdotool, xbindkeys work natively)
+## Configuration
 
-## Skills (intelligence layer)
+Kavi loads its tunable config from `brain/skills/kavi-voice-assistant.md` (YAML frontmatter): wake word, fuzzy match distance, VAD aggressiveness, silence thresholds. Edit the skill and restart Kavi, no code changes needed.
 
-See `brain/skills/` in the parent repo. Five skills written for this project:
+## Project layout
 
-- `kavi-voice-assistant.md` — wake word, VAD, fuzzy match, mode dispatch
-- `voice-chat-cli-platform.md` — PipeWire, xbindkeys, xdotool on Linux Mint
-- `local-stt-comparison-2026.md` — whisper.cpp vs Parakeet TDT
-- `maxwell-cuda-constraints.md` — CUDA build, PyTorch pinning, OOM on 4 GB
-- `local-llm-finetune-2026.md` — Path A/B/C decision tree
-
-Kavi.py loads config from `kavi-voice-assistant.md` YAML frontmatter. Tune behavior by editing the skill, not the Python.
-
-## See also
-
-- `STATE.md` — full state, file map, open work, decisions
-- `/home/nidhi/learn/brain/pages/projects/voice-enforcer.md` — project state in brain
-- `/home/nidhi/learn/brain/pages/postmortems/2026-07-12-oom-hang.md` — original OOM postmortem
+- `voice-chat/`: Kavi itself, the daemon, install script, systemd units, CLI (`kavi start|stop|status|logs`).
+- `ARCHITECTURE.md`: diagrams for hotkey chain, process topology, dispatch logic, resource profile.
+- `voice-chat/CLAUDE.md`: stack details and dev notes for this subproject.
 
 ## License
 
